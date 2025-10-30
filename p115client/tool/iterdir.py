@@ -11,6 +11,7 @@ __all__ = [
     "iter_nodes_using_info", "iter_nodes_using_event",  "iter_dir_nodes_using_star", 
     "iter_parents", "iter_dupfiles", "iter_media_files", "search_iter", "share_iterdir", 
     "share_iterdir_traverse", "share_iterdir_walk", "share_iter_files", "share_search_iter", 
+    "extract_iterdir", "extract_iterdir_traverse", "extract_iterdir_walk", "extract_iter_files", 
     "iter_id_to_dirnode", 
 ]
 __doc__ = "这个模块提供了一些和目录信息罗列有关的函数"
@@ -89,28 +90,28 @@ def overview_attr(info: Mapping, /) -> OverviewAttr:
             id = int(info["fid"])
             pid = int(info["cid"])
         ctime = int(info.get("tp") or info["t"])
-        mtime = int(info.get("te") or info["t"])
+        mtime = int(info.get("te", ctime))
     elif "fn" in info:
         is_dir = info["fc"] == "0"
         name = info["fn"]
         id = int(info["fid"])
         pid = int(info["pid"])
-        ctime = int(info["uppt"])
-        mtime = int(info["upt"])
+        ctime = int(info.get("uppt", 0))
+        mtime = int(info.get("upt", ctime))
     elif "file_category" in info:
         is_dir = int(info["file_category"]) == 0
         if is_dir:
             name = info["category_name"]
             id = int(info["category_id"])
             pid = int(info["parent_id"])
-            ctime = int(info["pptime"])
-            mtime = int(info["ptime"])
+            ctime = int(info.get("pptime", 0))
+            mtime = int(info.get("ptime", ctime))
         else:
             name = info["file_name"]
             id = int(info["file_id"])
             pid = int(info["category_id"])
-            ctime = int(info["user_pptime"])
-            mtime = int(info["user_ptime"])
+            ctime = int(info.get("user_pptime", 0))
+            mtime = int(info.get("user_ptime", ctime))
     else:
         raise ValueError(f"can't overview attr data: {info!r}")
     return OverviewAttr(is_dir, id, pid, name, ctime, mtime)
@@ -616,7 +617,7 @@ def _iter_fs_files(
     escape: None | bool | Callable[[str], str] = True, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False] = False, 
     **request_kwargs, 
@@ -637,7 +638,7 @@ def _iter_fs_files(
     escape: None | bool | Callable[[str], str] = True, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[True], 
     **request_kwargs, 
@@ -657,7 +658,7 @@ def _iter_fs_files(
     escape: None | bool | Callable[[str], str] = True, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False, True] = False, 
     **request_kwargs, 
@@ -688,7 +689,7 @@ def _iter_fs_files(
 
     :param app: 使用指定 app（设备）的接口
     :param cooldown: 冷却时间，单位为秒。如果为 None，则用默认值（非并发时为 0，并发时为 1）
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
 
@@ -805,7 +806,7 @@ def iterdir(
     ensure_file: None | bool = None, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False] = False, 
     **request_kwargs, 
@@ -827,7 +828,7 @@ def iterdir(
     ensure_file: None | bool = None, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[True], 
     **request_kwargs, 
@@ -848,7 +849,7 @@ def iterdir(
     ensure_file: None | bool = None, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False, True] = False, 
     **request_kwargs, 
@@ -882,7 +883,7 @@ def iterdir(
 
     :param app: 使用指定 app（设备）的接口
     :param cooldown: 冷却时间，单位为秒。如果为 None，则用默认值（非并发时为 0，并发时为 1）
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
 
@@ -1134,7 +1135,7 @@ def iter_stared_dirs(
     raise_for_changed_count: bool = False, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False] = False, 
     **request_kwargs, 
@@ -1152,7 +1153,7 @@ def iter_stared_dirs(
     raise_for_changed_count: bool = False, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[True], 
     **request_kwargs, 
@@ -1169,7 +1170,7 @@ def iter_stared_dirs(
     raise_for_changed_count: bool = False, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False, True] = False, 
     **request_kwargs, 
@@ -1194,7 +1195,7 @@ def iter_stared_dirs(
     :param raise_for_changed_count: 分批拉取时，发现总数发生变化后，是否报错
     :param app: 使用指定 app（设备）的接口
     :param cooldown: 冷却时间，单位为秒。如果为 None，则用默认值（非并发时为 0，并发时为 1）
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
 
@@ -1226,7 +1227,7 @@ def iter_dirs(
     cid: int | str | Mapping = 0, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
     app: str = "android", 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     max_dirs: int | None = 0, 
     *, 
     async_: Literal[False] = False, 
@@ -1239,7 +1240,7 @@ def iter_dirs(
     cid: int | str | Mapping = 0, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
     app: str = "android", 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     max_dirs: int | None = 0, 
     *, 
     async_: Literal[True], 
@@ -1251,7 +1252,7 @@ def iter_dirs(
     cid: int | str | Mapping = 0, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
     app: str = "android", 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     max_dirs: int | None = 0, 
     *, 
     async_: Literal[False, True] = False, 
@@ -1263,7 +1264,7 @@ def iter_dirs(
     :param cid: 目录 id 或 pickcode
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典
     :param app: 使用指定 app（设备）的接口
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param max_dirs: 估计最大存在的目录数，<= 0 时则无限
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
@@ -1341,7 +1342,7 @@ def iter_dirs_with_path(
 
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典
     :param app: 使用指定 app（设备）的接口
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param max_dirs: 估计最大存在的目录数，<= 0 时则无限
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
@@ -1405,7 +1406,7 @@ def iter_files(
     raise_for_changed_count: bool = False, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False] = False, 
     **request_kwargs, 
@@ -1427,7 +1428,7 @@ def iter_files(
     raise_for_changed_count: bool = False, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[True], 
     **request_kwargs, 
@@ -1448,7 +1449,7 @@ def iter_files(
     raise_for_changed_count: bool = False, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False, True] = False, 
     **request_kwargs, 
@@ -1487,7 +1488,7 @@ def iter_files(
     :param raise_for_changed_count: 分批拉取时，发现总数发生变化后，是否报错
     :param app: 使用指定 app（设备）的接口
     :param cooldown: 冷却时间，单位为秒。如果为 None，则用默认值（非并发时为 0，并发时为 1）
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
 
@@ -1638,7 +1639,7 @@ def iter_files_with_path(
     :param raise_for_changed_count: 分批拉取时，发现总数发生变化后，是否报错
     :param app: 使用指定 app（设备）的接口
     :param cooldown: 冷却时间，单位为秒。如果为 None，则用默认值（非并发时为 0，并发时为 1）
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param max_dirs: 估计最大存在的目录数，<= 0 时则无限
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
@@ -1842,7 +1843,7 @@ def iter_files_with_path_skim(
     :param with_ancestors: 文件信息中是否要包含 "ancestors"
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典
     :param path_already: 如果为 True，则说明 id_to_dirnode 中已经具备构建路径所需要的目录节点，所以不会再去拉取目录节点的信息
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param max_files: 估计最大存在的文件数，<= 0 时则无限
     :param max_dirs: 估计最大存在的目录数，<= 0 时则无限
     :param app: 使用指定 app（设备）的接口
@@ -1922,7 +1923,7 @@ def iter_files_shortcut(
     :param client: 115 客户端或 cookies
     :param cid: 待被遍历的目录 id 或 pickcode
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param is_skim: 是否拉取简要信息
     :param with_path: 是否需要 "path" 和 "ancestors" 字段
     :param app: 使用指定 app（设备）的接口
@@ -2210,7 +2211,7 @@ def traverse_tree(
     :param cid: 目录 id 或 pickcode
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典
     :param app: 使用指定 app（设备）的接口
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param max_files: 估计最大存在的文件数，<= 0 时则无限
     :param max_dirs: 估计最大存在的目录数，<= 0 时则无限
     :param async_: 是否异步
@@ -2326,7 +2327,7 @@ def traverse_tree_with_path(
 
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典
     :param app: 使用指定 app（设备）的接口
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param max_files: 估计最大存在的文件数，<= 0 时则无限
     :param max_dirs: 估计最大存在的目录数，<= 0 时则无限
     :param async_: 是否异步
@@ -2416,7 +2417,7 @@ def iter_nodes(
     ignore_deleted: bool = False, 
     normalize_attr: None | Callable[[dict], dict] = normalize_attr, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False] = False, 
     **request_kwargs, 
@@ -2429,7 +2430,7 @@ def iter_nodes(
     ignore_deleted: bool = False, 
     normalize_attr: None | Callable[[dict], dict] = normalize_attr, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[True], 
     **request_kwargs, 
@@ -2441,7 +2442,7 @@ def iter_nodes(
     ignore_deleted: bool = False, 
     normalize_attr: None | Callable[[dict], dict] = normalize_attr, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False, True] = False, 
     **request_kwargs, 
@@ -2456,7 +2457,7 @@ def iter_nodes(
     :param ignore_deleted: 忽略已经被删除的
     :param normalize_attr: 把数据进行转换处理，使之便于阅读
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典，如果为 ...，则忽略
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
 
@@ -2502,7 +2503,7 @@ def iter_nodes_skim(
     client: str | PathLike | P115Client, 
     ids: Iterable[int | str], 
     batch_size: int = 50_000, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False] = False, 
     **request_kwargs, 
@@ -2513,7 +2514,7 @@ def iter_nodes_skim(
     client: str | PathLike | P115Client, 
     ids: Iterable[int | str], 
     batch_size: int = 50_000, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[True], 
     **request_kwargs, 
@@ -2523,7 +2524,7 @@ def iter_nodes_skim(
     client: str | PathLike | P115Client, 
     ids: Iterable[int | str], 
     batch_size: int = 50_000, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False, True] = False, 
     **request_kwargs, 
@@ -2533,7 +2534,7 @@ def iter_nodes_skim(
     :param client: 115 客户端或 cookies
     :param ids: 一组文件或目录的 id 或 pickcode
     :param batch_size: 批次大小，分批次，每次提交的 id 数
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
 
@@ -2569,7 +2570,7 @@ def iter_nodes_by_pickcode(
     ignore_deleted: None | bool = False, 
     normalize_attr: None | Callable[[dict], dict] = None, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False] = False, 
     **request_kwargs, 
@@ -2582,7 +2583,7 @@ def iter_nodes_by_pickcode(
     ignore_deleted: None | bool = False, 
     normalize_attr: None | Callable[[dict], dict] = None, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[True], 
     **request_kwargs, 
@@ -2594,7 +2595,7 @@ def iter_nodes_by_pickcode(
     ignore_deleted: None | bool = False, 
     normalize_attr: None | Callable[[dict], dict] = None, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False, True] = False, 
     **request_kwargs, 
@@ -2609,7 +2610,7 @@ def iter_nodes_by_pickcode(
     :param ignore_deleted: 是否忽略已经被删除的
     :param normalize_attr: 把数据进行转换处理，使之便于阅读
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典，如果为 ...，则忽略
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
 
@@ -2667,7 +2668,7 @@ def iter_nodes_using_update(
     ids: Iterable[int | str], 
     ignore_deleted: None | bool = False, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False] = False, 
     **request_kwargs, 
@@ -2679,7 +2680,7 @@ def iter_nodes_using_update(
     ids: Iterable[int | str], 
     ignore_deleted: None | bool = False, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[True], 
     **request_kwargs, 
@@ -2690,7 +2691,7 @@ def iter_nodes_using_update(
     ids: Iterable[int | str], 
     ignore_deleted: None | bool = False, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False, True] = False, 
     **request_kwargs, 
@@ -2704,7 +2705,7 @@ def iter_nodes_using_update(
     :param ids: 一组文件或目录的 id 或 pickcode
     :param ignore_deleted: 是否忽略已经被删除的
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典，如果为 ...，则忽略
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
 
@@ -2749,7 +2750,7 @@ def iter_nodes_using_info(
     client: str | PathLike | P115Client | P115OpenClient, 
     ids: Iterable[int | str], 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     app: str = "", 
     *, 
     async_: Literal[False] = False, 
@@ -2761,7 +2762,7 @@ def iter_nodes_using_info(
     client: str | PathLike | P115Client | P115OpenClient, 
     ids: Iterable[int | str], 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     app: str = "", 
     *, 
     async_: Literal[True], 
@@ -2772,7 +2773,7 @@ def iter_nodes_using_info(
     client: str | PathLike | P115Client | P115OpenClient, 
     ids: Iterable[int | str], 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     app: str = "", 
     *, 
     async_: Literal[False, True] = False, 
@@ -2786,7 +2787,7 @@ def iter_nodes_using_info(
     :param client: 115 客户端或 cookies
     :param ids: 一组文件或目录的 id
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典，如果为 ...，则忽略
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param app: 使用指定 app（设备）的接口
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
@@ -3016,7 +3017,7 @@ def iter_dir_nodes_using_star(
     raise_for_changed_count: bool = False, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     already_stared: bool = False, 
     *, 
     async_: Literal[False] = False, 
@@ -3031,7 +3032,7 @@ def iter_dir_nodes_using_star(
     raise_for_changed_count: bool = False, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     already_stared: bool = False, 
     *, 
     async_: Literal[True], 
@@ -3045,7 +3046,7 @@ def iter_dir_nodes_using_star(
     raise_for_changed_count: bool = False, 
     app: str = "android", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     already_stared: bool = False, 
     *, 
     async_: Literal[False, True] = False, 
@@ -3065,7 +3066,7 @@ def iter_dir_nodes_using_star(
     :param raise_for_changed_count: 分批拉取时，发现总数发生变化后，是否报错
     :param app: 使用指定 app（设备）的接口
     :param cooldown: 冷却时间，大于 0 时，两次接口调用之间至少间隔这么多秒
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param already_stared: 说明所有 id 都已经打过星标，不用再次打星标
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
@@ -3145,7 +3146,7 @@ def iter_parents(
 
     :param client: 115 客户端或 cookies
     :param ids: 一批文件或目录的 id
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
 
@@ -3264,7 +3265,7 @@ def iter_dupfiles[K](
         - 如果为 False，则保留最晚入组的那个文件
 
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param is_skim: 是否拉取简要信息
     :param with_path: 是否需要 "path" 和 "ancestors" 字段
     :param app: 使用指定 app（设备）的接口
@@ -3542,7 +3543,7 @@ def search_iter(
     return run_gen_step_iter(gen_step, async_)
 
 
-# TODO: 支持 app, cooldown, max_workers
+# TODO: 支持 cooldown, max_workers
 @overload
 def share_iterdir(
     client: None | str | PathLike | P115Client, 
@@ -3550,13 +3551,13 @@ def share_iterdir(
     receive_code: str = "", 
     cid: int | Mapping = 0, 
     page_size: int = 0, 
-    order: Literal["file_name", "file_size", "file_type", "user_utime", "user_ptime", "user_otime"] = "user_ptime", 
+    order: Literal["file_name", "file_size", "user_ptime"] = "user_ptime", 
     asc: Literal[0, 1] = 1, 
     normalize_attr: None | Callable[[dict], dict] = normalize_attr, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
     app: str = "web", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False] = False, 
     **request_kwargs, 
@@ -3569,13 +3570,13 @@ def share_iterdir(
     receive_code: str = "", 
     cid: int | Mapping = 0, 
     page_size: int = 0, 
-    order: Literal["file_name", "file_size", "file_type", "user_utime", "user_ptime", "user_otime"] = "user_ptime", 
+    order: Literal["file_name", "file_size", "user_ptime"] = "user_ptime", 
     asc: Literal[0, 1] = 1, 
     normalize_attr: None | Callable[[dict], dict] = normalize_attr, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
     app: str = "web", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[True], 
     **request_kwargs, 
@@ -3587,18 +3588,21 @@ def share_iterdir(
     receive_code: str = "", 
     cid: int | Mapping = 0, 
     page_size: int = 0, 
-    order: Literal["file_name", "file_size", "file_type", "user_utime", "user_ptime", "user_otime"] = "user_ptime", 
+    order: Literal["file_name", "file_size", "user_ptime"] = "user_ptime", 
     asc: Literal[0, 1] = 1, 
     normalize_attr: None | Callable[[dict], dict] = normalize_attr, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
     app: str = "web", 
     cooldown: None | float = None, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     *, 
     async_: Literal[False, True] = False, 
     **request_kwargs, 
 ) -> Iterator[dict] | AsyncIterator[dict]:
     """对分享链接迭代目录，获取文件信息
+
+    .. note::
+        当 `app="web"`（默认），则 `client` 可以传 None，即可以不登录获取数据
 
     :param client: 115 客户端或 cookies
     :param share_code: 分享码或链接
@@ -3619,11 +3623,11 @@ def share_iterdir(
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典
     :param app: 使用指定 app（设备）的接口
     :param cooldown: 冷却时间，单位为秒。如果为 None，则用默认值（非并发时为 0，并发时为 1）
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
 
-    :return: 迭代器，被打上星标的目录信息
+    :return: 迭代器，返回此目录内的文件信息（文件和目录）
     """
     if isinstance(cid, Mapping):
         cid = cast(int, cid["id"])
@@ -3631,6 +3635,10 @@ def share_iterdir(
         client = P115Client("")
     elif isinstance(client, (str, PathLike)):
         client = P115Client(client, check_for_relogin=True)
+    if app in ("", "web", "desktop", "harmony"):
+        share_snap: Callable = client.share_snap
+    else:
+        share_snap = partial(client.share_snap_app, app=app)
     if page_size <= 0:
         page_size = 10_000
     def gen_step():
@@ -3658,7 +3666,7 @@ def share_iterdir(
         })
         count = 0
         while True:
-            resp = yield client.share_snap(
+            resp = yield share_snap(
                 payload, 
                 async_=async_, 
                 **request_kwargs, 
@@ -3745,6 +3753,9 @@ def share_iterdir_traverse(
 
     .. attention::
         这个函数不支持并发，而且是对罗列目录接口的循环调用，所以速度会比较慢，而且也容易被风控（可以设置 `cooldown` 以限制接口调用频率）
+
+    .. note::
+        当 `app="web"`（默认），则 `client` 可以传 None，即可以不登录获取数据
 
     :param client: 115 客户端或 cookies
     :param share_code: 分享码或链接
@@ -3858,6 +3869,9 @@ def share_iterdir_walk(
     .. attention::
         这个函数不支持并发，而且是对罗列目录接口的循环调用，所以速度会比较慢，而且也容易被风控（可以设置 `cooldown` 以限制接口调用频率）
 
+    .. note::
+        当 `app="web"`（默认），则 `client` 可以传 None，即可以不登录获取数据
+
     :param client: 115 客户端或 cookies
     :param share_code: 分享码或链接
     :param receive_code: 接收码
@@ -3905,15 +3919,14 @@ def share_iterdir_walk(
     ))
 
 
-# TODO: 允许使用 app 端接口 share_downlist_app
 @overload
 def share_iter_files(
-    client: None | str | PathLike | P115Client, 
+    client: str | PathLike | P115Client, 
     share_code: str, 
     receive_code: str = "", 
     cid: int | Mapping = 0, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    app: str = "web", 
+    app: str = "android", 
     *, 
     async_: Literal[False] = False, 
     **request_kwargs, 
@@ -3921,24 +3934,24 @@ def share_iter_files(
     ...
 @overload
 def share_iter_files(
-    client: None | str | PathLike | P115Client, 
+    client: str | PathLike | P115Client, 
     share_code: str, 
     receive_code: str = "", 
     cid: int | Mapping = 0, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    app: str = "web", 
+    app: str = "android", 
     *, 
     async_: Literal[True], 
     **request_kwargs, 
 ) -> AsyncIterator[dict]:
     ...
 def share_iter_files(
-    client: None | str | PathLike | P115Client, 
+    client: str | PathLike | P115Client, 
     share_code: str, 
     receive_code: str = "", 
     cid: int | Mapping = 0, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
-    app: str = "web", 
+    app: str = "android", 
     *, 
     async_: Literal[False, True] = False, 
     **request_kwargs, 
@@ -3968,10 +3981,12 @@ def share_iter_files(
     """
     if isinstance(cid, Mapping):
         cid = cast(int, cid["id"])
-    if client is None:
-        client = P115Client("")
-    elif isinstance(client, (str, PathLike)):
+    if isinstance(client, (str, PathLike)):
         client = P115Client(client, check_for_relogin=True)
+    if app in ("", "web", "desktop", "harmony"):
+        share_downlist: Callable = client.share_downlist
+    else:
+        share_downlist = client.share_downlist_app
     def gen_step():
         nonlocal id_to_dirnode
         payload = cast(dict, share_extract_payload(share_code))
@@ -3987,37 +4002,43 @@ def share_iter_files(
             payload["receive_code"] = resp["data"]["receive_code"]
         if id_to_dirnode is None:
             id_to_dirnode = ID_TO_DIRNODE_CACHE[payload["share_code"]]
-        payload["cid"] = cid
-        with with_iter_next(share_iterdir(
-            client, 
-            **payload, 
-            id_to_dirnode=id_to_dirnode, 
-            app=app, 
-            async_=async_, 
-            **request_kwargs, 
-        )) as get_next:
-            while True:
-                attr = yield get_next()
-                if attr.get("is_dir"):
-                    payload["cid"] = attr["id"]
-                    resp = yield client.share_downlist(
-                        payload, 
-                        async_=async_, 
-                        **request_kwargs, 
-                    )
-                    check_response(resp)
-                    for info in resp["data"]["list"]:
-                        fid, sha1 = info["fid"].split("_", 1)
-                        yield Yield({
-                            "id": int(fid), 
-                            "sha1": sha1, 
-                            "name": info["fn"], 
-                            "size": int(info["si"]), 
-                            "path": f"/{info['pt']}/{info['fn']}", 
-                        })
+        def load_cid(cid: int, /):
+            payload["cid"] = cid
+            resp = yield share_downlist(
+                payload, 
+                async_=async_, 
+                **request_kwargs, 
+            )
+            check_response(resp)
+            for info in resp["data"]["list"]:
+                fid, hash = info["fid"].split("_", 1)
+                attr = {"id": int(fid), "hash": hash}
+                if "fn" in info:
+                    attr["size"] = int(info["si"])
+                    attr["name"] = info["fn"]
+                    attr["path"] = f"/{info['pt']}/{info['fn']}"
                 else:
-                    yield Yield({k: attr[k] for k in ("id", "sha1", "name", "size", "path")})
-    return run_gen_step(gen_step, async_)
+                    attr["dir"] = "/" + info["pt"]
+                yield Yield(attr)
+        if cid:
+            yield from load_cid(cid)
+        else:
+            with with_iter_next(share_iterdir(
+                client, 
+                **payload, 
+                id_to_dirnode=id_to_dirnode, 
+                app=app, 
+                async_=async_, 
+                **request_kwargs, 
+            )) as get_next:
+                while True:
+                    attr = yield get_next()
+                    if attr.get("is_dir"):
+                        yield from load_cid(attr["id"])
+                    else:
+                        attr["path"] = "/" + attr["name"]
+                        yield Yield(attr)
+    return run_gen_step_iter(gen_step, async_)
 
 
 @overload
@@ -4146,6 +4167,399 @@ def share_search_iter(
     return run_gen_step_iter(gen_step, async_)
 
 
+@overload
+def extract_iterdir(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    page_size: int = 999, 
+    app: str = "web", 
+    cooldown: None | float = None, 
+    *, 
+    async_: Literal[False] = False, 
+    **request_kwargs, 
+) -> Iterator[dict]:
+    ...
+@overload
+def extract_iterdir(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    page_size: int = 999, 
+    app: str = "web", 
+    cooldown: None | float = None, 
+    *, 
+    async_: Literal[True], 
+    **request_kwargs, 
+) -> AsyncIterator[dict]:
+    ...
+def extract_iterdir(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    page_size: int = 999, 
+    app: str = "web", 
+    cooldown: None | float = None, 
+    *, 
+    async_: Literal[False, True] = False, 
+    **request_kwargs, 
+) -> Iterator[dict] | AsyncIterator[dict]:
+    """对压缩包迭代目录，获取文件信息
+
+    :param client: 115 客户端或 cookies
+    :param pickcode: 压缩文件的 pickcode 或 id
+    :param path: 压缩包内（目录）路径，为空则是压缩包的根目录
+    :param page_size: 分页大小，最大 999
+    :param app: 使用指定 app（设备）的接口
+    :param cooldown: 冷却时间，单位为秒。如果为 None，则用默认值（非并发时为 0，并发时为 1）
+    :param async_: 是否异步
+    :param request_kwargs: 其它请求参数
+
+    :return: 迭代器，返回此目录内的文件信息（文件和目录）
+    """
+    if isinstance(pickcode, Mapping):
+        pickcode = cast(str | int, get_first(pickcode, "pickcode", "id"))
+    if isinstance(path, Mapping):
+        path = cast(str, path["path"])
+    if isinstance(client, (str, PathLike)):
+        client = P115Client(client, check_for_relogin=True)
+    pickcode = client.to_pickcode(pickcode)
+    if app in ("", "web", "desktop", "harmony"):
+        extract_list: Callable = client.extract_list
+    else:
+        extract_list = partial(client.extract_list_app, app=app)
+    def gen_step():
+        next_marker = ""
+        start_t: float = 0
+        while True:
+            if cooldown and cooldown > 0:
+                if start_t and (delta := start_t + cooldown - time()) > 0:
+                    if async_:
+                        yield async_sleep(delta)
+                    else:
+                        sleep(delta)
+                start_t = time()
+            resp = yield extract_list(
+                pickcode, 
+                path=path, 
+                next_marker=next_marker, 
+                page_count=page_size, 
+                async_=async_, 
+                **request_kwargs, 
+            )
+            check_response(resp)
+            for attr in resp["data"]["list"]:
+                attr["pickcode"] = pickcode
+                attr["is_dir"] = not attr["file_category"]
+                attr["name"] = attr["file_name"]
+                attr["path"] = path + "/" + attr["file_name"]
+                yield Yield(attr)
+            next_marker = resp["data"]["next_marker"]
+            if not next_marker:
+                break
+    return run_gen_step_iter(gen_step, async_)
+
+
+@overload
+def extract_iterdir_traverse(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    page_size: int = 999, 
+    topdown: None | bool = True, 
+    min_depth: int = 1, 
+    max_depth: int = -1, 
+    predicate: None | bool | Callable[[dict], Any] = None, 
+    onerror: bool | Callable[[OSError], Any] = False, 
+    app: str = "web", 
+    cooldown: None | float = None, 
+    *, 
+    async_: Literal[False] = False, 
+    **request_kwargs, 
+) -> Iterator[dict]:
+    ...
+@overload
+def extract_iterdir_traverse(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    page_size: int = 999, 
+    topdown: None | bool = True, 
+    min_depth: int = 1, 
+    max_depth: int = -1, 
+    predicate: None | bool | Callable[[dict], Any] = None, 
+    onerror: bool | Callable[[OSError], Any] = False, 
+    app: str = "web", 
+    cooldown: None | float = None, 
+    *, 
+    async_: Literal[True], 
+    **request_kwargs, 
+) -> AsyncIterator[dict]:
+    ...
+def extract_iterdir_traverse(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    page_size: int = 999, 
+    topdown: None | bool = True, 
+    min_depth: int = 1, 
+    max_depth: int = -1, 
+    predicate: None | bool | Callable[[dict], Any] = None, 
+    onerror: bool | Callable[[OSError], Any] = False, 
+    app: str = "web", 
+    cooldown: None | float = None, 
+    *, 
+    async_: Literal[False, True] = False, 
+    **request_kwargs, 
+) -> Iterator[dict] | AsyncIterator[dict]:
+    """迭代目录树，获取文件信息
+
+    .. attention::
+        这个函数不支持并发，而且是对罗列目录接口的循环调用，所以速度会比较慢，而且也容易被风控（可以设置 `cooldown` 以限制接口调用频率）
+
+    :param client: 115 客户端或 cookies
+    :param pickcode: 压缩文件的 pickcode 或 id
+    :param path: 压缩包内（目录）路径，为空则是压缩包的根目录
+    :param page_size: 分页大小，最大 999
+    :param topdown: 如果是 True，自顶向下深度优先搜索；如果是 False，自底向上深度优先搜索；如果是 None，广度优先搜索
+    :param min_depth: 最小深度，`top` 本身为 0
+    :param max_depth: 最大深度，< 0 时不限
+    :param predicate: 调用以筛选遍历得到的路径
+
+        - 如果为 None，则不做筛选
+        - 如果为 True，则只输出文件
+        - 如果为 False，则只输出目录
+        - 否则，就是 Callable。对于返回值
+            - 如果为 True，则输出它，且会继续搜索它的子树
+            - 如果为 False，则跳过它，但会继续搜索它的子树
+            - 如果为 1，则输出它，但跳过它的子树
+            - 如果为 0，则跳过它，且跳过它的子树
+
+    :param onerror: 处理 OSError 异常。如果是 True，抛出异常；如果是 False，忽略异常；如果是调用，以异常为参数调用之
+    :param app: 使用指定 app（设备）的接口
+    :param cooldown: 冷却时间，单位为秒。如果为 None，则用默认值（非并发时为 0，并发时为 1）
+    :param async_: 是否异步
+    :param request_kwargs: 其它请求参数
+
+    :return: 迭代器，返回此目录内的文件信息（文件和目录）
+    """
+    return iterdir_generic(
+        path, 
+        iterdir=partial( # type: ignore
+            extract_iterdir, 
+            client, 
+            pickcode, 
+            page_size=page_size, 
+            app=app, 
+            cooldown=cooldown, 
+            async_=async_, 
+            **request_kwargs, 
+        ), 
+        topdown=topdown, 
+        min_depth=min_depth, 
+        max_depth=max_depth, 
+        isdir=itemgetter("is_dir"), 
+        predicate=predicate, 
+        onerror=onerror, 
+        async_=async_, # type: ignore
+    )
+
+
+@overload
+def extract_iterdir_walk(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    page_size: int = 999, 
+    topdown: None | bool = True, 
+    min_depth: int = 1, 
+    max_depth: int = -1, 
+    onerror: bool | Callable[[OSError], Any] = False, 
+    app: str = "web", 
+    cooldown: None | float = None, 
+    *, 
+    async_: Literal[False] = False, 
+    **request_kwargs, 
+) -> Iterator[tuple[int, list[dict], list[dict]]]:
+    ...
+@overload
+def extract_iterdir_walk(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    page_size: int = 999, 
+    topdown: None | bool = True, 
+    min_depth: int = 1, 
+    max_depth: int = -1, 
+    onerror: bool | Callable[[OSError], Any] = False, 
+    app: str = "web", 
+    cooldown: None | float = None, 
+    *, 
+    async_: Literal[True], 
+    **request_kwargs, 
+) -> AsyncIterator[tuple[int, list[dict], list[dict]]]:
+    ...
+def extract_iterdir_walk(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    page_size: int = 999, 
+    topdown: None | bool = True, 
+    min_depth: int = 1, 
+    max_depth: int = -1, 
+    onerror: bool | Callable[[OSError], Any] = False, 
+    app: str = "web", 
+    cooldown: None | float = None, 
+    *, 
+    async_: Literal[False, True] = False, 
+    **request_kwargs, 
+) -> Iterator[tuple[int, list[dict], list[dict]]] | AsyncIterator[tuple[int, list[dict], list[dict]]]:
+    """迭代目录树，获取文件信息
+
+    .. attention::
+        这个函数不支持并发，而且是对罗列目录接口的循环调用，所以速度会比较慢，而且也容易被风控（可以设置 `cooldown` 以限制接口调用频率）
+
+    :param client: 115 客户端或 cookies
+    :param pickcode: 压缩文件的 pickcode 或 id
+    :param path: 压缩包内（目录）路径，为空则是压缩包的根目录
+    :param page_size: 分页大小，最大 999
+    :param topdown: 如果是 True，自顶向下深度优先搜索；如果是 False，自底向上深度优先搜索；如果是 None，广度优先搜索
+    :param min_depth: 最小深度，`top` 本身为 0
+    :param max_depth: 最大深度，< 0 时不限
+    :param onerror: 处理 OSError 异常。如果是 True，抛出异常；如果是 False，忽略异常；如果是调用，以异常为参数调用之
+    :param app: 使用指定 app（设备）的接口
+    :param cooldown: 冷却时间，单位为秒。如果为 None，则用默认值（非并发时为 0，并发时为 1）
+    :param async_: 是否异步
+    :param request_kwargs: 其它请求参数
+
+    :return: 迭代器，产生 (pid, 目录信息列表, 文件信息列表) 元组
+    """
+    if isinstance(path, Mapping):
+        path = cast(str, path["path"])
+    def project(t, /):
+        path, dirs, files = t
+        if isinstance(path, Mapping):
+            path = path["path"]
+        return path, dirs, files
+    return do_map(project, walk_generic(
+        path, 
+        iterdir=partial( # type: ignore
+            extract_iterdir, 
+            client, 
+            pickcode, 
+            page_size=page_size, 
+            app=app, 
+            cooldown=cooldown, 
+            async_=async_, 
+            **request_kwargs, 
+        ), 
+        topdown=topdown, 
+        min_depth=min_depth, 
+        max_depth=max_depth, 
+        isdir=itemgetter("is_dir"), 
+        onerror=onerror, 
+        async_=async_, # type: ignore
+    ))
+
+
+@overload
+def extract_iter_files(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    app: str = "web", 
+    *, 
+    async_: Literal[False] = False, 
+    **request_kwargs, 
+) -> Iterator[dict]:
+    ...
+@overload
+def extract_iter_files(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    app: str = "web", 
+    *, 
+    async_: Literal[True], 
+    **request_kwargs, 
+) -> AsyncIterator[dict]:
+    ...
+def extract_iter_files(
+    client: str | PathLike | P115Client, 
+    pickcode: str | int | Mapping, 
+    path: str | Mapping = "", 
+    app: str = "web", 
+    *, 
+    async_: Literal[False, True] = False, 
+    **request_kwargs, 
+) -> Iterator[dict] | AsyncIterator[dict]:
+    """批量获取压缩包中的文件列表
+
+    :param client: 115 客户端或 cookies
+    :param pickcode: 压缩文件的 pickcode 或 id
+    :param path: 压缩包内（目录）路径，为空则是压缩包的根目录
+    :param app: 使用指定 app（设备）的接口
+    :param async_: 是否异步
+    :param request_kwargs: 其它请求参数
+
+    :return: 迭代器，返回此分享链接下的（所有文件）文件信息，由于接口返回信息有限，所以比较简略
+
+        .. code:: python
+
+            {
+                "id": int, 
+                "sha1": str, 
+                "name": str, 
+                "size": int, 
+                "path": str, 
+            }
+    """
+    if isinstance(pickcode, Mapping):
+        pickcode = cast(str | int, get_first(pickcode, "pickcode", "id"))
+    if isinstance(path, Mapping):
+        path = cast(str, path["path"])
+    if isinstance(client, (str, PathLike)):
+        client = P115Client(client, check_for_relogin=True)
+    pickcode = client.to_pickcode(pickcode)
+    if app in ("", "web", "desktop", "harmony"):
+        extract_folders: Callable = client.extract_folders
+    else:
+        extract_folders = partial(client.extract_folders_app, app=app)
+    def gen_step():
+        def load_path(path: str, /):
+            resp = yield extract_folders(
+                {"pick_code": pickcode, "full_dir_name": path.strip("/")}, 
+                async_=async_, 
+                **request_kwargs, 
+            )
+            check_response(resp)
+            dir_ = "path" + "/"
+            for info in resp["data"]:
+                yield Yield({
+                    "name": info["fn"], 
+                    "size": int(info["si"]), 
+                    "path": dir_ + info["fn"], 
+                })
+        if path:
+            yield from load_path(path)
+        else:
+            with with_iter_next(extract_iterdir(
+                client, 
+                pickcode, 
+                app=app, 
+                async_=async_, 
+                **request_kwargs, 
+            )) as get_next:
+                while True:
+                    attr = yield get_next()
+                    if attr.get("is_dir"):
+                        yield from load_path(attr["path"])
+                    else:
+                        attr["path"] = "/" + attr["name"]
+                        yield Yield(attr)
+    return run_gen_step_iter(gen_step, async_)
+
+
 def iter_id_to_dirnode(
     key: int | str | PathLike | P115Client | P115OpenClient, 
 ) -> Iterator[tuple[int, DirNode]]:
@@ -4163,4 +4577,4 @@ def iter_id_to_dirnode(
     key = cast(int | str, key)
     return ((k, DirNode(*v)) for k, v in ID_TO_DIRNODE_CACHE[key].items())
 
-# TODO: 再增加一个关于压缩文件的罗列（完全参考 share_*）：extract_iterdir, extract_iterdir_traverse, extract_iterdir_walk, extract_iter_files
+# TODO: 创建一个 share_files.py 模块，参照 fs_files.py

@@ -97,13 +97,13 @@ def iter_fs_files(
     :param app: 使用此设备的接口
     :param raise_for_changed_count: 分批拉取时，发现总数发生变化后，是否报错
     :param cooldown: 冷却时间，单位为秒。如果为 None，则用默认值（非并发时为 0，并发时为 1）
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param async_: 是否异步
     :param request_kwargs: 其它 http 请求参数，会传给具体的请求函数，默认的是 httpx，可用参数 request 进行设置
 
     :return: 迭代器，每次返回一次接口调用的结果
     """
-    if max_workers == 1:
+    if max_workers == 0:
         request_kwargs["async_"] = async_
         method: Callable = iter_fs_files_serialized
     else:

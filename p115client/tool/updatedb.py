@@ -322,7 +322,7 @@ def updatedb(
     :param dbfile: 数据库文件路径，如果为 None，则自动确定
     :param cid: 目录的 id 或 pickcode
     :param recursive: 如果为 True，则拉取所有以之为祖先（先驱）节点的节点信息；否则，拉取所有以之为父（前驱）节点的节点信息
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param max_files: 估计最大存在的文件数，<= 0 时则无限
     :param max_dirs: 估计最大存在的目录数，<= 0 时则无限
     :param app: 使用指定 app（设备）的接口

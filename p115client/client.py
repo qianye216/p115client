@@ -21955,6 +21955,99 @@ class P115Client(P115OpenClient):
         return self.request(url=api, method="POST", data=payload, async_=async_, **request_kwargs)
 
     @overload
+    def share_recvcode(
+        self, 
+        payload: str | dict, 
+        /, 
+        base_url: str | Callable[[], str] = "https://webapi.115.com", 
+        *, 
+        async_: Literal[False] = False, 
+        **request_kwargs, 
+    ) -> dict:
+        ...
+    @overload
+    def share_recvcode(
+        self, 
+        payload: str | dict, 
+        /, 
+        base_url: str | Callable[[], str] = "https://webapi.115.com", 
+        *, 
+        async_: Literal[True], 
+        **request_kwargs, 
+    ) -> Coroutine[Any, Any, dict]:
+        ...
+    def share_recvcode(
+        self, 
+        payload: str | dict, 
+        /, 
+        base_url: str | Callable[[], str] = "https://webapi.115.com", 
+        *, 
+        async_: Literal[False, True] = False, 
+        **request_kwargs, 
+    ) -> dict | Coroutine[Any, Any, dict]:
+        """取消访问码
+
+        GET https://webapi.115.com/share/recvcode
+
+        :payload:
+            - share_code: str
+            - action: str = "cancel"
+        """
+        api = complete_url("/share/recvcode", base_url=base_url)
+        if isinstance(payload, str):
+            payload = {"share_code": payload}
+        payload.setdefault("action", "cancel")
+        return self.request(url=api, params=payload, async_=async_, **request_kwargs)
+
+    @overload
+    def share_recvcode_app(
+        self, 
+        payload: str | dict, 
+        /, 
+        app: str = "android", 
+        base_url: str | Callable[[], str] = "https://webapi.115.com", 
+        *, 
+        async_: Literal[False] = False, 
+        **request_kwargs, 
+    ) -> dict:
+        ...
+    @overload
+    def share_recvcode_app(
+        self, 
+        payload: str | dict, 
+        /, 
+        app: str = "android", 
+        base_url: str | Callable[[], str] = "https://webapi.115.com", 
+        *, 
+        async_: Literal[True], 
+        **request_kwargs, 
+    ) -> Coroutine[Any, Any, dict]:
+        ...
+    def share_recvcode_app(
+        self, 
+        payload: str | dict, 
+        /, 
+        app: str = "android", 
+        base_url: str | Callable[[], str] = "https://webapi.115.com", 
+        *, 
+        async_: Literal[False, True] = False, 
+        **request_kwargs, 
+    ) -> dict | Coroutine[Any, Any, dict]:
+        """取消访问码
+
+        GET https://proapi.115.com/android/2.0/share/recvcode
+
+        :payload:
+            - share_code: str
+            - action: str = "cancel"
+        """
+        api = complete_url("/2.0/share/recvcode", base_url=base_url, app=app)
+        if isinstance(payload, str):
+            payload = {"share_code": payload}
+        payload.setdefault("action", "cancel")
+        return self.request(url=api, params=payload, async_=async_, **request_kwargs)
+
+    @overload
     def share_send(
         self, 
         payload: int | str | dict, 

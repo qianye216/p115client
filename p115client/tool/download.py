@@ -917,7 +917,7 @@ def make_db(
     :param dbfile: 数据库路径或连接
     :param cid: 目录 id 或 pickcode
     :param recursive: 如果为 True，则拉取所有以之为祖先（先驱）节点的节点信息；否则，拉取所有以之为父（前驱）节点的节点信息
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param app: 使用指定 app（设备）的接口
     :param async_: 是否异步
     :param request_kwargs: 其它请求参数
@@ -1278,7 +1278,7 @@ def iter_download_nodes(
     files: bool = True, 
     ensure_name: bool = False, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = ..., 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     max_page: int | None = 0, 
     app: str = "android", 
     *, 
@@ -1293,7 +1293,7 @@ def iter_download_nodes(
     files: bool = True, 
     ensure_name: bool = False, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = ..., 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     max_page: int | None = 0, 
     app: str = "android", 
     *, 
@@ -1307,7 +1307,7 @@ def iter_download_nodes(
     files: bool = True, 
     ensure_name: bool = False, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = ..., 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     max_page: int | None = 0, 
     app: str = "android", 
     *, 
@@ -1326,7 +1326,7 @@ def iter_download_nodes(
     :param files: 如果为 True，则只获取文件，否则只获取目录
     :param ensure_name: 确保返回数据中有 "name" 字段
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param max_page: 要拉取的最大页码（页码从 1 开始计数）
 
         - 如果为 None，则页码从小到大拉取，并会尝试获取总文件数，当获取到后且还在运行中，则从后往前拉取
@@ -1590,7 +1590,7 @@ def iter_download_files(
     with_ancestors: bool = False, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
     path_already: bool = False, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     max_files: int | None = 0, 
     max_dirs: int | None = 0, 
     app: str = "android", 
@@ -1608,7 +1608,7 @@ def iter_download_files(
     with_ancestors: bool = False, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
     path_already: bool = False, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     max_files: int | None = 0, 
     max_dirs: int | None = 0, 
     app: str = "android", 
@@ -1625,7 +1625,7 @@ def iter_download_files(
     with_ancestors: bool = False, 
     id_to_dirnode: None | EllipsisType | MutableMapping[int, tuple[str, int]] = None, 
     path_already: bool = False, 
-    max_workers: None | int = 1, 
+    max_workers: None | int = 0, 
     max_files: int | None = 0, 
     max_dirs: int | None = 0, 
     app: str = "android", 
@@ -1648,7 +1648,7 @@ def iter_download_files(
     :param with_ancestors: 文件信息中是否要包含 "ancestors"
     :param id_to_dirnode: 字典，保存 id 到对应文件的 ``(name, parent_id)`` 元组的字典
     :param path_already: 如果为 True，则说明 id_to_dirnode 中已经具备构建路径所需要的目录节点，所以不会再去拉取目录节点的信息
-    :param max_workers: 最大并发数，如果为 None 或 <= 0，则自动确定
+    :param max_workers: 最大并发数，如果为 None 或 < 0 则自动确定，如果为 0 则单工作者惰性执行
     :param max_files: 估计最大存在的文件数，<= 0 时则无限
     :param max_dirs: 估计最大存在的目录数，<= 0 时则无限
     :param app: 使用指定 app（设备）的接口

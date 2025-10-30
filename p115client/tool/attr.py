@@ -126,6 +126,7 @@ def normalize_attr_web[D: dict[str, Any]](
             attr["has_desc"] = 1 if val else 0
         for key, name in (
             ("aid", "area_id"), 
+            ("all_skip_login", "all_skip_login"), 
             ("audio_play_long", "audio_play_long"), 
             ("c", "is_collect"), 
             ("cc", "cover"), 
@@ -137,6 +138,7 @@ def normalize_attr_web[D: dict[str, Any]](
             ("e", "pick_expire"), 
             ("fl", "labels"), 
             ("hdf", "is_private"), 
+            ("is_skip_login", "is_skip_login"), 
             ("is_top", "is_top"), 
             ("ispl", "show_play_long"), 
             ("issct", "is_shortcut"), 
@@ -267,6 +269,7 @@ def normalize_attr_app[D: dict[str, Any]](
             attr["utime"] = int(info["uet"])
         for key, name in (
             ("aid", "area_id"),           # 域 id，表示文件的状态：1:正常 7:删除(回收站) 120:彻底删除
+            ("all_skip_login", "all_skip_login"), # 是否支持免登录下载
             ("audio_play_long", "audio_play_long"), # 音频长度
             ("current_time", "current_time"), # 视频当前播放位置（从头开始到此为第 `current_time` 秒）
             ("d_img", "d_img"),           # 目录封面
@@ -281,6 +284,7 @@ def normalize_attr_app[D: dict[str, Any]](
             ("fta", "status"),            # 文件状态：0/2:未上传完成，1:已上传完成
             ("ftype", "file_type"),       # 文件类型代码
             ("ic", "is_collect"),         # 是否违规
+            ("is_skip_login", "is_skip_login"), # 是否开启免登录下载
             ("is_top", "is_top"),         # 是否置顶
             ("ism", "is_mark"),           # 是否星标
             ("ism", "star"),              # 是否星标（别名）
