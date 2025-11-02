@@ -12738,7 +12738,7 @@ class P115Client(P115OpenClient):
             payload = {"ids": payload}
         elif not isinstance(payload, dict):
             payload = {f"fid[{i}]": fid for i, fid in enumerate(payload)}
-        payload = {"pid": pid, "user_id": self.user_id, **payload}
+        payload = {"to_cid": pid, "user_id": self.user_id, **payload}
         return self.request(url=api, method="POST", data=payload, async_=async_, **request_kwargs)
 
     @overload
@@ -22692,8 +22692,8 @@ class P115Client(P115OpenClient):
 
     @overload
     def share_snap_app(
-        self: dict | ClientRequestMixin, 
-        payload: None | dict = None, 
+        self, 
+        payload: dict, 
         /, 
         app: str = "android", 
         base_url: str | Callable[[], str] = "https://proapi.115.com", 
@@ -22704,8 +22704,8 @@ class P115Client(P115OpenClient):
         ...
     @overload
     def share_snap_app(
-        self: dict | ClientRequestMixin, 
-        payload: None | dict = None, 
+        self, 
+        payload: dict, 
         /, 
         app: str = "android", 
         base_url: str | Callable[[], str] = "https://proapi.115.com", 
@@ -22715,8 +22715,8 @@ class P115Client(P115OpenClient):
     ) -> Coroutine[Any, Any, dict]:
         ...
     def share_snap_app(
-        self: dict | ClientRequestMixin, 
-        payload: None | dict = None, 
+        self, 
+        payload: dict, 
         /, 
         app: str = "android", 
         base_url: str | Callable[[], str] = "https://proapi.115.com", 
@@ -22728,10 +22728,8 @@ class P115Client(P115OpenClient):
 
         GET https://proapi.115.com/android/2.0/share/snap
 
-        .. note::
-            可以作为 ``staticmethod`` 使用
-
-            如果是登录状态，且查看自己的分享时，则可以不提供 receive_code，而且即使还在审核中，也能获取文件列表
+        .. caution::
+            这个接口必须登录使用，并且对于其它人的网盘文件，每个目录中最多获取前 1000 条（但获取自己的资源正常）
 
         :payload:
             - share_code: str
@@ -22747,13 +22745,8 @@ class P115Client(P115OpenClient):
                 - "user_ptime": 创建时间/修改时间
         """
         api = complete_url("/2.0/share/snap", base_url=base_url, app=app)
-        if isinstance(self, dict):
-            payload = self
-        else:
-            assert payload is not None
         payload = {"cid": 0, "limit": 32, "offset": 0, **payload}
-        return get_request(async_, request_kwargs, self=self)(
-            url=api, params=payload, **request_kwargs)
+        return self.request(url=api, params=payload, async_=async_, **request_kwargs)
 
     @overload
     def share_update(

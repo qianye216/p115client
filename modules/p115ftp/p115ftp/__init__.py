@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 __author__ = "ChenyangGao <https://chenyanggao.github.io>"
-__version__ = (0, 0, 2)
+__version__ = (0, 0, 3)
 __license__ = "GPLv3 <https://www.gnu.org/licenses/gpl-3.0.txt>"
 __all__ = ["P115FS"]
 
@@ -14,10 +14,11 @@ from os import stat_result, PathLike
 from pathlib import Path
 from posixpath import commonpath, join as joinpath, normpath, split as splitpath
 from stat import filemode, S_IFDIR, S_IFREG
+from yarl import URL
 
-from cachedict import LRUDict, TTLDict
+from cachedict import LRUDict
 from errno2 import errno
-from p115client import P115Client, check_response
+from p115client import check_response, P115Client, P115URL
 from p115client.tool import iterdir, get_attr, get_id, type_of_attr
 from pyftpdlib.authorizers import DummyAuthorizer # type: ignore
 from pyftpdlib.handlers import FTPHandler # type: ignore
@@ -45,19 +46,22 @@ class P115FS:
         self.root = absnorm(root)
         self.cmd_channel = cmd_channel
         self.client: P115Client = getattr(cmd_channel, "client")
-        self._fs_cache: dict[str, dict] = TTLDict(3600)
-        self._url_cache: dict[str, str] = LRUDict(1024)
+        self._fs_cache: dict[str, dict] = LRUDict(65536)
+        self._url_cache: dict[int, P115URL] = LRUDict(1024)
 
     def get_attr(self, /, path: str) -> dict:
         cache = self._fs_cache
         path = self.ftpnorm(path)
         if path == "/":
             return {"id": 0, "parent_id": 0, "is_dir": True, "size": 0}
-        if path in cache:
-            return cache[path]
+        attr = cache.get(path)
+        if attr and attr["path"] == path:
+            return attr
         client = self.client
         id = get_id(client, path=path)
-        attr = cache[path] = get_attr(client, id, skim=True)
+        attr = get_attr(client, id, skim=True)
+        attr["path"] = path
+        cache[path] = attr
         return attr
 
     def ftpnorm(self, /, ftppath: str) -> str:
@@ -129,25 +133,39 @@ class P115FS:
         attr = self.get_attr(path)
         if attr["is_dir"]:
             raise IsADirectoryError(errno.EISDIR, path)
-        elif (self.cmd_channel.use_thumbs and 
+        client = self.client
+        if (self.cmd_channel.use_thumbs and 
             type_of_attr(attr) == 2 and 
             (thumb := attr.get("thumb"))
         ):
             url = thumb
+            try:
+                file = client.open(url)
+            except:
+                attr.pop("thumb", None)
+                raise
         else:
             cache = self._url_cache
-            path = self.ftpnorm(path)
-            url = cache.get(path)
-            client = self.client
+            fid = attr["id"]
+            if url := cache.get(fid):
+                if int(URL(url).query["t"]) - time.time() < 60 * 5:
+                    url = None
             if not url:
-                url = cache[path] = client.download_url(attr["pickcode"], app="android")
-        try:
-            file = client.open(url)
-        except:
-            cache.pop(path, None)
-            raise
-        if "b" not in mode:
-            return file.wrap(True)
+                if attr.get("is_collect"):
+                    if attr["size"] > 1024 * 1024 * 200:
+                        raise OSError(errno.EIO, f"file {path!r} (id={fid}) has been censored")
+                    url = cache[fid] = self.client.download_url(
+                        attr["pickcode"], headers={"user-agent": ""}, app="web")
+                else:
+                    url = cache[fid] = client.download_url(
+                        attr["pickcode"], headers={"user-agent": ""}, app="android")
+            try:
+                file = client.open(url, headers=url.headers)
+            except:
+                cache.pop(fid, None)
+                raise
+            if "b" not in mode:
+                return file.wrap(True)
         return file
 
     def chdir(self, /, path: str):
@@ -172,10 +190,13 @@ class P115FS:
         client = self.client
         cache = self._fs_cache
         ls: list[dict] = []
-        path = self.ftpnorm(path)
+        add_info = ls.append
+        dir_ = self.ftpnorm(path)
         for attr in iterdir(client, attr["id"]):
-            cache[joinpath(path, attr["name"])] = attr
-            ls.append(attr)
+            path = joinpath(dir_, attr["name"])
+            attr["path"] = path
+            cache[path] = attr
+            add_info(attr)
         return ls
 
     def rmdir(self, /, path: str):
@@ -184,11 +205,13 @@ class P115FS:
         if not attr["is_dir"]:
             raise NotADirectoryError(errno.ENOTDIR, path)
         check_response(self.client.fs_delete_app(attr["id"]))
+        self._fs_cache.pop(path, None)
 
     def remove(self, /, path: str):
         """Remove the specified file."""
         attr = self.get_attr(path)
         check_response(self.client.fs_delete_app(attr["id"]))
+        self._fs_cache.pop(path, None)
 
     def rename(self, /, src: str, dst: str):
         """Rename the specified src file to the dst filename."""
@@ -211,6 +234,9 @@ class P115FS:
             check_response(client.fs_move_app(attr["id"], dstdir_attr["id"]))
         if src_name != dst_name:
             check_response(client.fs_rename_app((attr["id"], dst_name)))
+        attr["path"] = dst
+        self._fs_cache.pop(src, None)
+        self._fs_cache[dst] = attr
 
     def stat(self, /, path: str) -> stat_result:
         """Perform a stat() system call on the given path."""

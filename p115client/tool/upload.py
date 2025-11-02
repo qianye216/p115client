@@ -42,6 +42,7 @@ from .iterdir import iterdir, iter_files_with_path, unescape_115_charref
 
 
 # TODO: 支持 open 接口
+# TODO: 再支持一个方法，目标 115 并不提供 client，只有 user_id 和 user_key
 @overload
 def iter_115_to_115(
     from_client: P115Client, 

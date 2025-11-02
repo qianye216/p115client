@@ -45,7 +45,6 @@ python-texttools = ">=0.0.3"
 pyyaml = "*"
 rich = "*"
 uvicorn = "*"
-wsgidav = "*"
 
 [tool.poetry.scripts]
 p115dav = "p115dav.__main__:main"

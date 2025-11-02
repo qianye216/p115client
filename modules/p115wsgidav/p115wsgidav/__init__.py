@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 __author__ = "ChenyangGao <https://chenyanggao.github.io>"
-__version__ = (0, 0, 2)
+__version__ = (0, 0, 3)
 __license__ = "GPLv3 <https://www.gnu.org/licenses/gpl-3.0.txt>"
 __all__ = ["FileResource", "FolderResource", "P115FileSystemProvider"]
 
@@ -13,7 +13,7 @@ from functools import cached_property
 from mimetypes import guess_type
 from os import PathLike
 from pathlib import Path
-from posixpath import split as splitpath
+from posixpath import commonpath, split as splitpath
 from _thread import allocate_lock
 from time import time
 from typing import Any
@@ -31,13 +31,13 @@ from yarl import URL
 
 
 class ttl_property:
-    __lock_cache__: WeakKeyDictionary[Any, Any] = WeakKeyDictionary()
-    __state_cache__: WeakKeyDictionary[Any, dict] = WeakKeyDictionary()
 
     def __init__(self, func: Callable, /, ttl: float = 0):
         self.__func__ = func
         self.__name__ = getattr(func, "__name__", "")
         self.ttl = ttl
+        self.__lock_cache__: WeakKeyDictionary[Any, Any] = WeakKeyDictionary()
+        self.__state_cache__: WeakKeyDictionary[Any, dict] = WeakKeyDictionary()
 
     def __set_name__(self, cls, name: str, /):
         self.__name__ = name
@@ -92,6 +92,7 @@ class DavPathBase:
 
     def delete(self, /):
         check_response(self.client.fs_delete_app(self.id))
+        self.path = None
 
     def get_available_bytes(self, /) -> int:
         return int(self.provider.space_info["all_remain"]["size"])
@@ -141,26 +142,28 @@ class DavPathBase:
     def get_used_bytes(self, /) -> int:
         return int(self.provider.space_info["all_use"]["size"])
 
-    # TODO: ...
+    # def finalize_headers(self, /, environ: dict, response_headers: dict):
+    #     # https://wsgidav.readthedocs.io/en/latest/_autosummary/wsgidav.dav_provider.DAVCollection.finalize_headers.html#wsgidav.dav_provider.DAVCollection.finalize_headers
+    #     return super().finalize_headers(environ, response_headers)
+
     # def handle_copy(self, /, dest_path: str, *, depth_infinity: bool):
     #     # https://wsgidav.readthedocs.io/en/latest/_autosummary/wsgidav.dav_provider.DAVCollection.handle_copy.html#wsgidav.dav_provider.DAVCollection.handle_copy
-    #     ...
+    #     return super().handle_copy(dest_path, depth_infinity=depth_infinity)
 
-    # TODO: ...
     # def handle_delete(self, /):
     #     # https://wsgidav.readthedocs.io/en/latest/_autosummary/wsgidav.dav_provider.DAVCollection.handle_delete.html#wsgidav.dav_provider.DAVCollection.handle_delete
-    #     ...
+    #     return super().handle_delete()
 
-    # TODO: ...
     # def handle_move(self, /, dest_path: str):
     #     # https://wsgidav.readthedocs.io/en/latest/_autosummary/wsgidav.dav_provider.DAVCollection.handle_move.html#wsgidav.dav_provider.DAVCollection.handle_move
-    #     ...
+    #     return super().handle_move(dest_path)
 
     def is_link(self, /) -> bool:
         return False
 
-    # TODO: ...
     def move_recursive(self, /, dest_path: str):
+        if not self.path:
+            raise DAVError(404)
         dest_path = dest_path.rstrip("/")
         if self.path == dest_path:
             return
@@ -168,17 +171,18 @@ class DavPathBase:
         fid = self.id
         dir0, name0 = splitpath(self.path)
         dir1, name1 = splitpath(dest_path)
-        if name0 != name1:
-            check_response(client.fs_rename_app((fid, name1)))
         if dir0 != dir1:
             if dir1 == "/":
                 cid = 0
-            elif inst := self.provider._instance_cache.get(dir1):
+            elif (inst := self.provider.get_resource_inst(dir1, self.environ)) and inst.is_collection:
                 cid = inst.id
             else:
                 resp = check_response(client.fs_makedirs_app(dir1))
                 cid = int(resp["cid"])
             check_response(client.fs_move_app(fid, pid=cid))
+        if name0 != name1:
+            check_response(client.fs_rename_app((fid, name1)))
+        self.path = dest_path
 
     def support_etag(self, /) -> bool:
         return True
@@ -189,7 +193,7 @@ class DavPathBase:
     def support_recursive_delete(self, /) -> bool:
         return True
 
-    def support_recursive_move(self, /) -> bool:
+    def support_recursive_move(self, /, dest_path: str) -> bool:
         return True
 
 
@@ -206,10 +210,11 @@ class FileResource(DavPathBase, DAVNonCollection):
         self.attr = attr
         self.provider._instance_cache[path] = self
 
-    # TODO: Copy or move this resource to destPath (non-recursive).
     def copy_move_single(self, dest_path: str, *, is_move: bool):
         if is_move:
             return self.move_recursive(dest_path)
+        if not self.path:
+            raise DAVError(404)
         dest_path = dest_path.rstrip("/")
         if self.path == dest_path:
             return
@@ -217,11 +222,11 @@ class FileResource(DavPathBase, DAVNonCollection):
         fid = self.id
         dir0, name0 = splitpath(self.path)
         dir1, name1 = splitpath(dest_path)
-        if dir0 == dir1:
-            cid = self.parent_id
-        elif dir1 == "/":
+        if dir1 == "/":
             cid = 0
-        elif inst := self.provider._instance_cache.get(dir1):
+        elif dir0 == dir1:
+            cid = self.parent_id
+        elif (inst := self.provider.get_resource_inst(dir1, self.environ)) and inst.is_collection:
             cid = inst.id
         else:
             resp = check_response(client.fs_makedirs_app(dir1))
@@ -229,6 +234,7 @@ class FileResource(DavPathBase, DAVNonCollection):
         if name0 == name1:
             check_response(client.fs_copy_app(fid, pid=cid))
         else:
+            # TODO: 如果文件已经被和谐，要怎么处理
             url = client.download_url(self.attr["pickcode"], app="android")
             check_response(client.upload_file(
                 file=url, 
@@ -302,6 +308,8 @@ class FolderResource(DavPathBase, DAVCollection):
     def copy_move_single(self, dest_path: str, *, is_move: bool):
         if is_move:
             return self.move_recursive(dest_path)
+        if not self.path:
+            raise DAVError(404)
         dest_path = dest_path.rstrip("/")
         if self.path == dest_path:
             return
@@ -311,11 +319,9 @@ class FolderResource(DavPathBase, DAVCollection):
             raise DAVError(403)
         client = self.client
         fid = self.id
-        if dir0 == dir1:
-            cid = self.parent_id
-        elif dir1 == "/":
+        if dir1 == "/":
             cid = 0
-        elif inst := self.provider._instance_cache.get(dir1):
+        elif (inst := self.provider.get_resource_inst(dir1, self.environ)) and inst.is_collection:
             cid = inst.id
         else:
             resp = check_response(client.fs_makedirs_app(dir1))
@@ -327,34 +333,44 @@ class FolderResource(DavPathBase, DAVCollection):
 
     @ttl_property.of(10)
     def children(self, /) -> dict[str, FileResource | FolderResource]:
+        if not self.path:
+            raise DAVError(404)
         children: dict[str, FileResource | FolderResource] = {}
         environ = self.environ
         dir_ = self.path
         if not dir_.endswith("/"):
             dir_ += "/"
-        for attr in iterdir(
-            self.client, 
-            self.id, 
-            app="android", 
-        ):
-            name = attr["name"]
-            path = dir_ + attr["name"]
-            if attr["is_dir"]:
-                children[name] = FolderResource(path, environ, attr)
-            else:
-                children[name] = FileResource(path, environ, attr)
+        try:
+            for attr in iterdir(
+                self.client, 
+                self.id, 
+                app="android", 
+            ):
+                name = attr["name"]
+                path = dir_ + attr["name"]
+                if attr["is_dir"]:
+                    children[name] = FolderResource(path, environ, attr)
+                else:
+                    children[name] = FileResource(path, environ, attr)
+        except NotADirectoryError as e:
+            raise DAVError(404) from e
         return children
 
     @ttl_property.of(10)
     def descendants(self, /) -> list[FileResource | FolderResource]:
+        if not self.path:
+            raise DAVError(404)
         descendants: list[FileResource | FolderResource] = []
         add_descendant = descendants.append
         environ = self.environ
-        for attr in traverse_tree_with_path(self.client, self.id, escape=None):
-            if attr["is_dir"]:
-                add_descendant(FolderResource(attr["path"], environ, attr))
-            else:
-                add_descendant(FileResource(attr["path"], environ, attr))
+        try:
+            for attr in traverse_tree_with_path(self.client, self.id, escape=None):
+                if attr["is_dir"]:
+                    add_descendant(FolderResource(attr["path"], environ, attr))
+                else:
+                    add_descendant(FileResource(attr["path"], environ, attr))
+        except NotADirectoryError as e:
+            raise DAVError(404) from e
         return descendants
 
     def get_descendants(
@@ -389,13 +405,23 @@ class FolderResource(DavPathBase, DAVCollection):
         return descendants
 
     def get_member(self, /, name: str) -> None | FileResource | FolderResource:
-        return self.children.get(name)
+        if inst := self.children.get(name):
+            if not (dir_ := self.path):
+                raise DAVError(404)
+            if commonpath((inst.path, dir_)) == dir_:
+                return inst
+        return None
 
     def get_member_list(self, /) -> list[FileResource | FolderResource]:
-        return list(self.children.values())
+        if not (dir_ := self.path):
+            raise DAVError(404)
+        return [a for a in self.children.values() if commonpath((a.path, dir_)) == dir_]
 
     def get_member_names(self, /) -> list[str]:
-        return list(self.children)
+        
+        if not (dir_ := self.path):
+            raise DAVError(404)
+        return [n for n, a in self.children.items() if commonpath((a.path, dir_)) == dir_]
 
 
 class P115FileSystemProvider(DAVProvider):
@@ -450,10 +476,13 @@ class P115FileSystemProvider(DAVProvider):
             return FolderResource(
                 "/", 
                 environ, 
-                {"id": 0, "parent_id": 0, "name": "", "is_dir": True}, 
+                {"id": 0, "parent_id": 0, "name": "", "is_dir": True, "path": "/"}, 
             )
         path = path.rstrip("/")
         inst = self._instance_cache.get(path)
+        if inst and path != inst.path:
+            self._instance_cache.pop(path, None)
+            inst = None
         if inst and not must_be_folder or isinstance(inst, FolderResource):
             return inst
         client = self.client
@@ -493,8 +522,9 @@ if __name__ == "__main__":
     P115FileSystemProvider().run_forever()
 
 # http://www.webdav.org
-# https://wsgidav.readthedocs.io/en/latest/
+# https://wsgidav.readthedocs.io
 # https://wsgidav.readthedocs.io/en/latest/user_guide_configure.html
+# https://wsgidav.readthedocs.io/en/latest/_modules/wsgidav/dav_provider.html#DAVCollection
 
 # TODO: p115dav 等其它模块，也可基于此来扩展
 # TODO: 再提供一个基于数据库的版本，给 p115servedb 使用

@@ -2,7 +2,7 @@
 # encoding: utf-8
 
 __author__ = "ChenyangGao <https://chenyanggao.github.io>"
-__version__ = (0, 0, 8)
+__version__ = (0, 0, 9)
 __all__ = [
     "upload_endpoint_url", "upload_url", "upload_token", "upload_token_open", 
     "upload_init", "upload_init_open", "upload_resume", "upload_resume_open", 
@@ -84,6 +84,7 @@ def _upload_token(
     **request_kwargs, 
 ) -> dict[str, str] | Coroutine[Any, Any, dict[str, str]]:
     request_kwargs["parse"] = parse_json
+    request_kwargs.pop("headers", None)
     def gen_step():
         if async_:
             lock: AsyncLock | Lock = _UPLOAD_TOKEN_ASYNC_LOCK
@@ -98,7 +99,10 @@ def _upload_token(
                 deadline = datetime.now() - timedelta(hours=7, minutes=59)
             if expiration < deadline.strftime("%FT%XZ"):
                 while True:
-                    resp = yield upload_token(async_=async_, **request_kwargs)
+                    try:
+                        resp = yield upload_token(async_=async_, **request_kwargs)
+                    except Exception:
+                        continue
                     if resp.get("StatusCode") == "200":
                         break
                 _UPLOAD_TOKEN.update(resp)
@@ -1346,7 +1350,7 @@ def oss_upload_init(
         if not filename:
             filename = str(uuid4())
         filesha1 = filesha1.upper()
-        if isinstance(pid, str) and pid.startswith("U"):
+        if isinstance(pid, str) and pid.startswith("U_"):
             target = pid
         else:
             target = f"U_1_{pid or 0}"

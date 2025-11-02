@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "p115ftp"
-version = "0.0.2"
+version = "0.0.3"
 description = "Python 115 FTP Server."
 authors = ["ChenyangGao <wosiwujm@gmail.com>"]
 license = "MIT"
@@ -29,8 +29,9 @@ include = [
 python = "^3.12"
 cachedict = ">=0.0.6"
 errno2 = ">=0.0.3"
-p115client = ">=0.0.7.5"
+p115client = ">=0.0.7.5.1"
 pyftpdlib = "*"
+yarl = "*"
 
 [tool.poetry.scripts]
 p115ftp = "p115ftp.__main__:main"

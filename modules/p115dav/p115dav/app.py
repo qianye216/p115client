@@ -7,20 +7,19 @@ __author__ = "ChenyangGao <https://chenyanggao.github.io>"
 __all__ = ["make_application"]
 
 from asyncio import (
-    create_task, get_running_loop, run_coroutine_threadsafe, sleep as async_sleep, 
+    create_task, get_running_loop, sleep as async_sleep, 
     AbstractEventLoop, Lock, 
 )
 from collections import deque
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import closing, suppress
 from errno import ENOENT, EBUSY
-from io import BytesIO
 from itertools import cycle
 from math import isinf, isnan
 from pathlib import Path
-from posixpath import split as splitpath, splitext
+from posixpath import splitext
 from queue import SimpleQueue
-from os import environ, remove
+from os import remove
 from re import compile as re_compile
 from sqlite3 import connect, PARSE_COLNAMES, PARSE_DECLTYPES, Connection
 from string import hexdigits
@@ -30,22 +29,18 @@ from typing import cast, Any
 from urllib.parse import parse_qsl, quote, urlsplit
 from weakref import WeakValueDictionary
 
-from a2wsgi import WSGIMiddleware
 from asynctools import to_list
 from blacksheep import redirect, text, Application, Router
 from blacksheep.contents import Content, StreamedContent
 from blacksheep.messages import Request, Response
 from blacksheep.server.compression import use_gzip_compression
-from blacksheep.server.rendering.jinja2 import JinjaRenderer
-from blacksheep.settings.html import html_settings
-from blacksheep.settings.json import json_settings
 from blacksheep.server.openapi.ui import ReDocUIProvider
 from blacksheep.server.openapi.v3 import OpenAPIHandler
 from blacksheep.server.remotes.forwarding import ForwardedHeadersMiddleware
 from blacksheep.server.responses import view_async
 from blacksheep_rich_log import middleware_access_log
 from cachedict import LRUDict, TTLDict, TLRUDict
-from encode_uri import encode_uri, encode_uri_component_loose
+from encode_uri import encode_uri_component_loose
 from dictattr import AttrDict
 from dicttools import contains_any, get_first
 # NOTE: 其它可用模块
@@ -64,36 +59,19 @@ from p115client.tool import (
 )
 from p115client.util import reduce_image_url_layers
 from p115pickcode import id_to_pickcode, pickcode_to_id
-from path_predicate import MappingPath
 from posixpatht import escape, normpath
-from property import locked_cacheproperty
 # NOTE: 其它可用模块
 # - https://pypi.org/project/ass/
 # - https://pypi.org/project/srt/
 from pysubs2 import SSAFile # type: ignore
 from sqlitedict import SqliteTableDict
 from sqlitetools import upsert_items
-from texttools import format_size, format_timestamp
-from wsgidav.wsgidav_app import WsgiDAVApp # type: ignore
-from wsgidav.dav_error import DAVError # type: ignore
-from wsgidav.dav_provider import DAVCollection, DAVNonCollection, DAVProvider # type: ignore
+
 
 from . import db
 
 
 CRE_URL_T_search = re_compile(r"(?<=(?:\?|&)t=)\d+").search
-
-environ["APP_JINJA_PACKAGE_NAME"] = "p115dav"
-html_settings.use(JinjaRenderer(enable_async=True))
-json_settings.use(loads=loads)
-jinja_env = getattr(html_settings.renderer, "env")
-jinja2_filters = jinja_env.filters
-jinja2_filters["format_size"] = format_size
-jinja2_filters["encode_uri"] = encode_uri
-jinja2_filters["encode_uri_component"] = encode_uri_component_loose
-jinja2_filters["json_dumps"] = lambda data: dumps(data).decode("utf-8").replace("'", "&apos;")
-jinja2_filters["format_timestamp"] = format_timestamp
-jinja2_filters["escape_name"] = lambda name, default="/": escape(name) or default
 
 
 class TooManyRequests(OSError):
@@ -104,19 +82,19 @@ def get_origin(request: Request, /) -> str:
     return f"{request.scheme}://{request.host}"
 
 
+# TODO: 默认情况下也使用数据库，只是使用的是使用 :memory:（内存数据库）
+# TODO: 更新数据库的操作专门单独提出来
+
+
+# 进来减少参数，使代码足够简单
 def make_application(
     dbfile: str | Path = "", 
     cookies_path: str | Path = "", 
     app_id: None | int = None, 
     ttl: int | float = 0, 
-    strm_origin: str = "", 
-    predicate = None, 
-    strm_predicate = None, 
     cache_url: bool = False, 
     cache_size: int = 65536, 
     debug: bool = False, 
-    wsgidav_config: dict = {}, 
-    only_webdav: bool = False, 
     check_for_relogin: bool = False, 
     # TODO: 可以指定前端文件地址，如果为 None，则展示默认
     frontend_dir = None, 
@@ -147,7 +125,7 @@ def make_application(
 
     app = Application(router=Router(), show_error_details=debug)
     use_gzip_compression(app)
-    if not only_webdav and frontend_dir:
+    if frontend_dir:
         if frontend_dir:
             app.serve_files(frontend_dir, fallback_document="index.html")
         else:
@@ -193,8 +171,6 @@ def make_application(
     SHARE_CODE_MAP: dict[str, dict] = {}
     # NOTE: 后台任务队列
     QUEUE: SimpleQueue[None | tuple[str | Callable, Any]] = SimpleQueue()
-    # NOTE: webdav 的文件对象缓存
-    DAV_FILE_CACHE: LRUDict[str, DAVNonCollection] = LRUDict(cache_size)
 
     put_task = QUEUE.put_nowait
     get_task = QUEUE.get
@@ -202,13 +178,6 @@ def make_application(
     fs_files: Callable
     con: Connection
     loop: AbstractEventLoop
-
-    def skip_if_only_webdav(deco, /):
-        def wrapped(func, /):
-            if not only_webdav:
-                deco(func)
-            return func
-        return wrapped
 
     def queue_execute():
         cur = con.cursor()
@@ -887,8 +856,8 @@ def make_application(
 
     # NOTE: 下面的接口用来从你的网盘获取信息
 
-    @skip_if_only_webdav(app.router.get("/%3Cid"))
-    @skip_if_only_webdav(app.router.get("/%3Cid/*"))
+    @app.router.get("/%3Cid")
+    @app.router.get("/%3Cid/*")
     async def get_id(
         id: int = -1, 
         pickcode: str = "", 
@@ -928,8 +897,8 @@ def make_application(
                 push_task_attr(cast(P115ID, fid))
         return fid
 
-    @skip_if_only_webdav(app.router.get("/%3Cpickcode"))
-    @skip_if_only_webdav(app.router.get("/%3Cpickcode/*"))
+    @app.router.get("/%3Cpickcode")
+    @app.router.get("/%3Cpickcode/*")
     async def get_pickcode(
         id: int = -1, 
         pickcode: str = "", 
@@ -974,8 +943,8 @@ def make_application(
             return pickcode
         raise FileNotFoundError(ENOENT, "does not have pickcode")
 
-    @skip_if_only_webdav(app.router.get("/%3Csha1"))
-    @skip_if_only_webdav(app.router.get("/%3Csha1/*"))
+    @app.router.get("/%3Csha1")
+    @app.router.get("/%3Csha1/*")
     async def get_sha1(
         id: int = -1, 
         pickcode: str = "", 
@@ -1021,8 +990,8 @@ def make_application(
             return sha1
         raise FileNotFoundError(ENOENT, "does not have sha1")
 
-    @skip_if_only_webdav(app.router.get("/%3Cpath"))
-    @skip_if_only_webdav(app.router.get("/%3Cpath/*"))
+    @app.router.get("/%3Cpath")
+    @app.router.get("/%3Cpath/*")
     async def get_path(
         id: int = -1, 
         pickcode: str = "", 
@@ -1056,8 +1025,8 @@ def make_application(
             return path
         raise FileNotFoundError(ENOENT, "does not have path")
 
-    @skip_if_only_webdav(app.router.get("/%3Cattr"))
-    @skip_if_only_webdav(app.router.get("/%3Cattr/*"))
+    @app.router.get("/%3Cattr")
+    @app.router.get("/%3Cattr/*")
     async def get_attr(
         id: int = -1, 
         pickcode: str = "", 
@@ -1108,8 +1077,8 @@ def make_application(
             })
         return attr
 
-    @skip_if_only_webdav(app.router.get("/%3Clist"))
-    @skip_if_only_webdav(app.router.get("/%3Clist/*"))
+    @app.router.get("/%3Clist")
+    @app.router.get("/%3Clist/*")
     async def get_list(
         id: int = -1, 
         pickcode: str = "", 
@@ -1128,8 +1097,8 @@ def make_application(
         id = await get_id(id=id, pickcode=pickcode, sha1=sha1, path=path)
         return await get_file_list(id)
 
-    @skip_if_only_webdav(app.router.get("/%3Cm3u8"))
-    @skip_if_only_webdav(app.router.get("/%3Cm3u8/*"))
+    @app.router.get("/%3Cm3u8")
+    @app.router.get("/%3Cm3u8/*")
     async def get_m3u8(pickcode: str) -> None | str:
         """获取 m3u8 文件链接
 
@@ -1150,8 +1119,8 @@ def make_application(
         check_response(resp)
         return data and data.get("video_url")
 
-    @skip_if_only_webdav(app.router.get("/%3Csubtitles"))
-    @skip_if_only_webdav(app.router.get("/%3Csubtitles/*"))
+    @app.router.get("/%3Csubtitles")
+    @app.router.get("/%3Csubtitles/*")
     async def get_subtitles(pickcode: str) -> None | list[dict]:
         """获取字幕（随便提供此文件夹内的任何一个文件的提取码即可）
 
@@ -1215,8 +1184,8 @@ def make_application(
         return wrap_url(url, url_detail)
 
     # TODO: 需要根据实际情况进行优化
-    @skip_if_only_webdav(app.router.route("/", methods=["GET", "HEAD"]))
-    @skip_if_only_webdav(app.router.route("/<path:path2>", methods=["GET", "HEAD"]))
+    @app.router.route("/", methods=["GET", "HEAD"])
+    @app.router.route("/<path:path2>", methods=["GET", "HEAD"])
     async def get_page(
         request: Request, 
         id: int = -1, 
@@ -1318,8 +1287,8 @@ def make_application(
 
     # NOTE: 下面的接口用来从分享获取信息
 
-    @skip_if_only_webdav(app.router.get("/%3Cshare/%3Cid"))
-    @skip_if_only_webdav(app.router.get("/%3Cshare/%3Cid/*"))
+    @app.router.get("/%3Cshare/%3Cid")
+    @app.router.get("/%3Cshare/%3Cid/*")
     async def share_get_id(
         share_code: str, 
         id: int = -1, 
@@ -1371,8 +1340,8 @@ def make_application(
             fid = 0
         return fid
 
-    @skip_if_only_webdav(app.router.get("/%3Cshare/%3Csha1"))
-    @skip_if_only_webdav(app.router.get("/%3Cshare/%3Csha1/*"))
+    @app.router.get("/%3Cshare/%3Csha1")
+    @app.router.get("/%3Cshare/%3Csha1/*")
     async def share_get_sha1(
         share_code: str, 
         id: int = -1, 
@@ -1421,8 +1390,8 @@ def make_application(
             sha1 = ""
         return sha1
 
-    @skip_if_only_webdav(app.router.get("/%3Cshare/%3Cpath"))
-    @skip_if_only_webdav(app.router.get("/%3Cshare/%3Cpath/*"))
+    @app.router.get("/%3Cshare/%3Cpath")
+    @app.router.get("/%3Cshare/%3Cpath/*")
     async def share_get_path(
         share_code: str, 
         id: int = -1, 
@@ -1471,8 +1440,8 @@ def make_application(
             path = "/"
         return path
 
-    @skip_if_only_webdav(app.router.get("/%3Cshare/%3Cattr"))
-    @skip_if_only_webdav(app.router.get("/%3Cshare/%3Cattr/*"))
+    @app.router.get("/%3Cshare/%3Cattr")
+    @app.router.get("/%3Cshare/%3Cattr/*")
     async def share_get_attr(
         share_code: str, 
         id: int = -1, 
@@ -1538,8 +1507,8 @@ def make_application(
         _ = await get_share_file_list(share_code, receive_code, parent_id, refresh_thumbs=True)
         return ID_TO_ATTR[(share_code, id)]
 
-    @skip_if_only_webdav(app.router.get("/%3Cshare/%3Clist"))
-    @skip_if_only_webdav(app.router.get("/%3Cshare/%3Clist/*"))
+    @app.router.get("/%3Cshare/%3Clist")
+    @app.router.get("/%3Cshare/%3Clist/*")
     async def share_get_list(
         share_code: str = "", 
         id: int = -1, 
@@ -1619,8 +1588,8 @@ def make_application(
     # TODO: 仅当使用默认的前端页面时，才启用此接口
     # TODO: 需要根据实际情况进行优化
     # TODO: 是否加载 libass，应该由页面自己决定（右上角添加一个按钮）
-    @skip_if_only_webdav(app.router.route("/%3Cshare", methods=["GET", "HEAD"]))
-    @skip_if_only_webdav(app.router.route("/%3Cshare/<path:path2>", methods=["GET", "HEAD"]))
+    @app.router.route("/%3Cshare", methods=["GET", "HEAD"])
+    @app.router.route("/%3Cshare/<path:path2>", methods=["GET", "HEAD"])
     async def share_get_page(
         request: Request, 
         share_code: str = "", 
@@ -1810,279 +1779,13 @@ def make_application(
         )
         return SSAFile.from_string(content.decode("utf-8"), format_=format).to_string("ass")
 
-    # NOTE: 下面是 WebDAV 的实现
-
-    class DavPathBase:
-
-        def __getattr__(self, attr: str, /):
-            try:
-                return self.attr[attr]
-            except KeyError as e:
-                raise AttributeError(attr) from e
-
-        @locked_cacheproperty
-        def mtime(self, /) -> int | float:
-            return self.attr.get("mtime", 0)
-
-        @locked_cacheproperty
-        def name(self, /) -> str:
-            return self.attr["name"]
-
-        @locked_cacheproperty
-        def size(self, /) -> int:
-            return self.attr.get("size") or 0
-
-        def get_display_name(self, /) -> str:
-            return self.name
-
-        def get_etag(self, /) -> str:
-            return "%s-%s-%s" % (
-                self.attr["id"], 
-                self.mtime, 
-                self.size, 
-            )
-
-        def get_last_modified(self, /) -> float:
-            return self.mtime
-
-        def is_link(self, /) -> bool:
-            return False
-
-        def support_etag(self, /) -> bool:
-            return True
-
-        def support_modified(self, /) -> bool:
-            return True
-
-    class FileResource(DavPathBase, DAVNonCollection):
-
-        def __init__(
-            self, 
-            /, 
-            path: str, 
-            environ: dict, 
-            attr: Mapping, 
-            is_strm: bool = False, 
-        ):
-            super().__init__(path, environ)
-            self.attr = attr
-            self.is_strm = is_strm
-            DAV_FILE_CACHE[path] = self
-
-        if strm_origin:
-            origin = strm_origin
-        else:
-            @locked_cacheproperty
-            def origin(self, /) -> str:
-                if origin := self.environ.get("STRM_ORIGIN"):
-                    return origin
-                return f"{self.environ['wsgi.url_scheme']}://{self.environ['HTTP_HOST']}"
-
-        @locked_cacheproperty
-        def size(self, /) -> int:
-            if self.is_strm:
-                return len(self.strm_data)
-            return self.attr["size"]
-
-        @locked_cacheproperty
-        def strm_data(self, /) -> bytes:
-            attr = self.attr
-            name = encode_uri_component_loose(attr["name"])
-            if share_code := attr.get("share_code"):
-                url = f"{self.origin}/<share/<url/{name}?share_code={share_code}&id={attr['id']}"
-            else:
-                url = f"{self.origin}/<url/{name}?pickcode={attr['pickcode']}&id={attr['id']}&sha1={attr['sha1']}"
-            return bytes(url, "utf-8")
-
-        @locked_cacheproperty
-        def url(self, /) -> str:
-            attr = self.attr
-            name = encode_uri_component_loose(attr["name"])
-            if share_code := attr.get("share_code"):
-                return f"/<share/<url?share_code={share_code}&id={attr['id']}"
-            else:
-                return f"/<url?pickcode={attr['pickcode']}"
-
-        def get_content(self, /):
-            if self.is_strm:
-                return BytesIO(self.strm_data)
-            raise DAVError(302, add_headers=[("Location", self.url)])
-
-        def get_content_length(self, /) -> int:
-            return self.size
-
-        def support_content_length(self, /) -> bool:
-            return True
-
-        def support_ranges(self, /) -> bool:
-            return True
-
-    class FolderResource(DavPathBase, DAVCollection):
-
-        def __init__(
-            self, 
-            /, 
-            path: str, 
-            environ: dict, 
-            attr: Mapping, 
-        ):
-            super().__init__(path, environ)
-            self.attr = attr
-
-        @locked_cacheproperty
-        def children(self, /) -> dict[str, FileResource | FolderResource]:
-            children: dict[str, FileResource | FolderResource] = {}
-            environ = self.environ
-            dir_ = self.path
-            if dir_ != "/":
-                dir_ += "/"
-            if dir_ == "/<share/":
-                shares = run_coroutine_threadsafe(list_my_shares(), loop).result()
-                for share in shares:
-                    share_code = share["share_code"]
-                    children[share["share_code"]] = FolderResource(
-                        f"/<share/{share_code}@{share['share_title'].replace('/', ':')}"[:256], 
-                        environ, 
-                        {
-                            "id": 0, 
-                            "parent_id": 0, 
-                            "is_dir": True, 
-                            "mtime": int(share["create_time"]), 
-                            "size": int(share["file_size"]), 
-                            "name": share["share_title"], 
-                            "ico": "folder", 
-                            "share_code": share_code, 
-                            "receive_code": share["receive_code"], 
-                        }, 
-                    )
-            else:
-                is_root = False
-                id = int(self.attr["id"])
-                if dir_.startswith("/<share/"):
-                    share_code = self.attr["share_code"]
-                    coro = share_get_list(share_code, id, receive_code=self.attr["receive_code"])
-                else:
-                    is_root = dir_ == "/"
-                    coro = get_list(id)
-                try:
-                    file_list = run_coroutine_threadsafe(coro, loop).result()
-                except FileNotFoundError:
-                    raise DAVError(404, dir_)
-                for attr in file_list["children"]:
-                    is_dir = attr["is_dir"]
-                    is_strm = False
-                    name = attr["name"].replace("/", "|")
-                    if not is_dir and strm_predicate and strm_predicate(MappingPath(attr)):
-                        is_strm = True
-                        name = splitext(name)[0] + ".strm"
-                        path = dir_ + name
-                    elif predicate and not predicate(MappingPath(attr)):
-                        continue
-                    else:
-                        path = dir_ + name
-                    if is_dir:
-                        children[name] = FolderResource(path, environ, attr)
-                    else:
-                        children[name] = FileResource(path, environ, attr, is_strm=is_strm)
-                if is_root:
-                    children["<share"] = FolderResource(
-                        "/<share", environ, {"id": 0, "name": "<share", "size": 0})
-            return children
-
-        def get_member(self, /, name: str) -> FileResource | FolderResource:
-            if attr := self.children.get(name):
-                return attr
-            raise DAVError(404, self.path + "/" + name)
-
-        def get_member_list(self, /) -> list[FileResource | FolderResource]:
-            return list(self.children.values())
-
-        def get_member_names(self, /) -> list[str]:
-            return list(self.children)
-
-        def get_property_value(self, /, name: str):
-            if name == "{DAV:}getcontentlength":
-                return 0
-            elif name == "{DAV:}iscollection":
-                return True
-            return super().get_property_value(name)
-
-    class P115FileSystemProvider(DAVProvider):
-
-        def get_resource_inst(
-            self, 
-            /, 
-            path: str, 
-            environ: dict, 
-        ) -> FolderResource | FileResource:
-            is_dir = path.endswith("/")
-            path = "/" + path.strip("/")
-            if not strm_origin:
-                origin = environ["STRM_ORIGIN"] = f"{environ['wsgi.url_scheme']}://{environ['HTTP_HOST']}"
-            will_get_from_list = "|" in path
-            dir_, name = splitpath(path)
-            if not is_dir:
-                if inst := DAV_FILE_CACHE.get(path):
-                    if not strm_origin and origin != inst.origin:
-                        inst = FileResource(path, environ, inst.attr, is_strm=inst.is_strm)
-                    return inst
-                will_get_from_list = will_get_from_list or path.endswith(".strm")
-            if will_get_from_list:
-                inst = self.get_resource_inst(dir_ + "/", environ)
-                if not isinstance(inst, FolderResource):
-                    raise DAVError(404, path)
-                return inst.get_member(name)
-            if path == "/<share":
-                return FolderResource("/<share", environ, {"id": 0, "name": "<share", "size": 0})
-            else:
-                if path.startswith("/<share/"):
-                    share_code, _, share_path = path[8:].partition("/")
-                    share_code = share_code.partition("@")[0]
-                    coro = share_get_attr(share_code=share_code, path=share_path)
-                else:
-                    coro = get_attr(path=path)
-                try:
-                    attr = run_coroutine_threadsafe(coro, loop).result()
-                except FileNotFoundError:
-                    raise DAVError(404, path)
-                is_strm = False
-                is_dir = attr["is_dir"]
-                if not is_dir and strm_predicate and strm_predicate(MappingPath(attr)):
-                    is_strm = True
-                    path = splitext(path)[0] + ".strm"
-                elif predicate and not predicate(MappingPath(attr)):
-                    raise DAVError(404, path)
-                if is_dir:
-                    return FolderResource(path, environ, attr)
-                else:
-                    return FileResource(path, environ, attr, is_strm=is_strm)
-
-        def is_readonly(self, /) -> bool:
-            return True
+    @app.router.route("/*", methods=["PROPFIND"])
+    def do_PROPFIND(request: Request):
+        ...
 
     @app.router.route("/*", methods=["PROPFIND"])
-    def index(request: Request):
-        return redirect(f"/<dav{request.url}")
-
-    if only_webdav:
-        app.router.route("/*", methods=["GET", "HEAD"])(index)
-
-    @app.router.route("/*", methods=["OPTIONS"])
-    def options(request: Request):
+    def do_OPTIONS(request: Request):
         return ""
-
-    # NOTE: https://wsgidav.readthedocs.io/en/latest/user_guide_configure.html
-    wsgidav_config = {
-        "host": "0.0.0.0", 
-        "port": 0, 
-        "mount_path": "/<dav", 
-        "simple_dc": {"user_mapping": {"*": True}}, 
-        **wsgidav_config, 
-        "provider_mapping": {"/": P115FileSystemProvider()}, 
-    }
-    mount_path = quote(wsgidav_config["mount_path"])
-    wsgidav_app = WsgiDAVApp(wsgidav_config)
-    app.mount(mount_path, WSGIMiddleware(wsgidav_app, workers=128, send_queue_size=256))
 
     return app
 
@@ -2113,6 +1816,8 @@ if __name__ == "__main__":
         with suppress(OSError):
             remove("p115dav-test.db-wal")
 
+# TODO: 提供一个接口，可以调用任何 115 的接口（其实就是直接对接口进行转发，并把结果原样返回，就像 proxy，直属携带了 cookies）
+
 # TODO: 需要有一个文档页面，可以看到所有可用的接口，以及其参数说明
 # TODO: 读取时，使用 uri，mode=ro
 # TODO: 支持自定义挂载分享链接（可以取名字以及目录结构，通过子应用挂载到特定路径下，但也可以直接由 share_code 获取）
@@ -2141,3 +1846,9 @@ if __name__ == "__main__":
 # TODO: 如果没有 client，则字幕文件使用 listdir
 # TODO: 支持 p115tiny302 的链接格式
 # TODO: 网页版支持另一套更现代化观感的 UI
+
+# TODO: webdav的网页版需要更美观
+# TODO: get_page 请求需要进行极致简化，逻辑在前端实现，如果请求数据，则自行调用接口
+# TODO: 如果 get 请求得到的是 xml 格式，则视为请求网盘
+
+# TODO IMPORTANT: 各种接口的实现需要极致简化，复杂性就移到 p115client.tool 中实现
